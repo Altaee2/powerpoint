@@ -1,5 +1,4 @@
 pyTelegramBotAPI
 pypdf
 python-pptx
-pdf2image
-aspose-slides
+reportlab
