@@ -1,1 +1,4 @@
 gunicorn
+pyTelegramBotAPI
+pywin32
+pypdf
