@@ -1,4 +1,5 @@
 pyTelegramBotAPI
 pypdf
 python-pptx
-reportlab
+pdf2image
+Pillow
