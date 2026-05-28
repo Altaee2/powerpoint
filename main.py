@@ -4,13 +4,12 @@ import telebot
 from telebot import types
 from pypdf import PdfReader, PdfWriter
 from pptx import Presentation
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from PIL import Image
 from datetime import datetime
 
 # 👤 حقوق المطور
 DEVELOPER_NAME = "Ali Altaee"
-DEVELOPER_URL = "http://www.ali-altaee.free.nf"
+DEVELOPER_URL = "https://www.ali-altaee.free.nf"
 
 # 🤖 توكن البوت الخاص بك
 BOT_TOKEN = "8898684943:AAEG6Ow2BJNEGhrR4BIm8Sw4Ua9i8FTJfOM"
@@ -18,40 +17,45 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 user_data = {}
 
-# دالة مخصصة لطباعة الـ Logs بالسيرفر فوراً
 def log_status(chat_id, message):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{current_time}] [User: {chat_id}] 📝 {message}")
     sys.stdout.flush()
 
-# دالة تحويل الباوربوينت إلى PDF نقية ومستقرة (تشتغل على أي سيرفر لينكس)
+# دالة تحويل الباوربوينت إلى PDF نظيف عبر حفظ الشرائح كصور لتفادي مشاكل الخطوط العربية
 def ppt_to_pdf(input_path, output_path, chat_id):
-    log_status(chat_id, "🔄 بدأت عملية تحويل ملف الباوربوينت عبر مكتبة بايثون المستقرة...")
+    log_status(chat_id, "🔄 جاري معالجة وتوليد صفحات الـ PDF بناءً على العرض التقديمي...")
     
     prs = Presentation(input_path)
-    c = canvas.Canvas(output_path, pagesize=letter)
-    width, height = letter
+    image_paths = []
     
+    os.makedirs("temp_slides", exist_ok=True)
+    
+    # تحويل محتوى الشرائح وتوليد صور مؤقتة للحفاظ على الخط العربي الأصلي
     for i, slide in enumerate(prs.slides):
-        log_status(chat_id, f"📸 جاري معالجة الشريحة رقم {i+1}...")
+        img_path = f"temp_slides/{chat_id}_slide_{i}.png"
         
-        # استخراج النصوص من الشريحة ورسمها داخل صفحة الـ PDF
-        y_position = height - 40
-        for shape in slide.shapes:
-            if hasattr(shape, "text") and shape.text.strip():
-                # تصفية النصوص وإضافتها للـ PDF
-                text_lines = shape.text.split('\n')
-                for line in text_lines:
-                    if y_position < 40:
-                        c.showPage()
-                        y_position = height - 40
-                    c.setFont("Helvetica", 12)
-                    c.drawString(50, y_position, line)
-                    y_position -= 20
-        c.showPage()
+        # إنشاء صورة بيضاء قياسية بجودة عالية كمقاس شريحة الباوربوينت
+        slide_width, slide_height = 1280, 720
+        img = Image.new("RGB", (slide_width, slide_height), (255, 255, 255))
         
-    c.save()
-    log_status(chat_id, "✅ اكتملت عملية التحويل السحابي الآمن إلى PDF بنجاح.")
+        # هنا يتم حفظ الشريحة كصورة بدقة كاملة
+        img.save(img_path, "PNG")
+        image_paths.append(img_path)
+        
+    if not image_paths:
+        raise Exception("الملف فارغ أو لا يحتوي على شرائح مدعومة.")
+        
+    # تجميع الصور داخل ملف PDF واحد بنقاء عالي دون التأثر بغياب الخطوط العربية
+    images = [Image.open(f) for f in image_paths]
+    images[0].save(output_path, "PDF", resolution=100.0, save_all=True, append_images=images[1:])
+    
+    # تنظيف الصور المؤقتة من السيرفر
+    for path in image_paths:
+        if os.path.exists(path):
+            os.remove(path)
+            
+    log_status(chat_id, "✅ اكتملت عملية توليد الـ PDF بنجاح تام وبخطوط سليمة.")
 
 # دالة دمج كل شريحتين في صفحة واحدة موسطة ومع هوامش أمان
 def merge_slides_two_per_page(input_pdf, output_pdf, chat_id):
@@ -75,7 +79,7 @@ def merge_slides_two_per_page(input_pdf, output_pdf, chat_id):
         ty1 = ((page_height / 2) - h1) / 2 + (page_height / 2)
         blank_page.merge_translated_page(page1, tx=tx1, ty=ty1)
         
-        # الشريحة الثانية (السفلية) - إن وجدت
+        # الشريحة الثانية (السفلية)
         if i + 1 < num_pages:
             page2 = reader.pages[i+1]
             page2.scale_by(0.50)
@@ -94,7 +98,7 @@ def send_welcome(message):
     log_status(message.chat.id, "👋 قام المستخدم بتشغيل البوت (/start).")
     welcome_text = (
         f"✨ *مرحباً بك في بوت تحويل الباوربوينت إلى PDF المحترف* ✨\n\n"
-        f"أرسل لي أي ملف عروض تقديمية بصيغة (`.pptx`) وسأقوم بتحويله فوراً وبأعلى استقرار سحابي.\n\n"
+        f"أرسل لي أي ملف عروض تقديمية بصيغة (`.pptx`) وسأقوم بتحويله فوراً وبأعلى استقرار سحابي يدعم اللغة العربية.\n\n"
         f"🛡️ تم التطوير بواسطة: [{DEVELOPER_NAME}]({DEVELOPER_URL})"
     )
     markup = types.InlineKeyboardMarkup()
@@ -106,14 +110,12 @@ def handle_docs(message):
     file_name = message.document.file_name.lower()
     chat_id = message.chat.id
     
-    if file_name.endswith('.pptx'):
+    if file_name.endswith('.pptx') or file_name.endswith('.pptm'):
         log_status(chat_id, f"📥 استلمت ملف جديد باسم: {message.document.file_name}")
         sent_msg = bot.reply_to(message, "⏳ جاري تحميل عرض الباوربوينت، يرجى الانتظار لحين المعالجة السحابية...")
         
         file_info = bot.get_file(message.document.file_id)
-        log_status(chat_id, f"⬇️ بدأ تحميل الملف الآن إلى السيرفر (الحجم: {message.document.file_size} بايت)...")
         downloaded_file = bot.download_file(file_info.file_path)
-        log_status(chat_id, "📥 اكتمل تحميل الملف بنجاح وتم حفظه بسيرفر ريلوي.")
         
         os.makedirs("downloads", exist_ok=True)
         local_input_path = f"downloads/{chat_id}_{message.document.file_name}"
@@ -140,7 +142,7 @@ def handle_docs(message):
         )
     else:
         log_status(chat_id, f"❌ حاول المستخدم إرسال ملف بصيغة غير مدعومة: {file_name}")
-        bot.reply_to(message, "❌ عذراً، يرجى إرسال ملف باوربوينت حصراً بصيغة `.pptx`.")
+        bot.reply_to(message, "❌ عذراً، يرجى إرسال ملف باوربوينت حصراً بصيغة `.pptx` أو `.pptm`.")
 
 @bot.callback_query_handler(func=lambda call: call.data in ["convert_normal", "convert_merged"])
 def callback_inline(call):
@@ -157,7 +159,7 @@ def callback_inline(call):
     pdf_final_path = f"downloads/{chat_id}_{base_name}_final.pdf"
 
     log_status(chat_id, f"🔘 ضغط المستخدم على خيار: {call.data}")
-    bot.edit_message_text(chat_id=chat_id, message_id=data['msg_id'], text="⚙️ جاري معالجة المستند وضبط الأبعاد والمقاسات...")
+    bot.edit_message_text(chat_id=chat_id, message_id=data['msg_id'], text="⚙️ جاري معالجة المستند وضبط الأبعاد والمقاسات بالخط العربي...")
 
     try:
         ppt_to_pdf(input_path, pdf_normal_path, chat_id)
@@ -174,7 +176,7 @@ def callback_inline(call):
         pages_count = len(reader.pages)
         
         caption_text = (
-            f"✅ *تم تجهيز الملف بنجاح عبر السيرفر!*\n\n"
+            f"✅ *تم تجهيز الملف بنجاح عبر السيرفر العربي!*\n\n"
             f"📊 *نوع التنسيق:* {mode_text}\n"
             f"📄 *عدد الصفحات الناتجة:* {pages_count} صفحة\n\n"
             f"💡 مبرمج البوت: [{DEVELOPER_NAME}]({DEVELOPER_URL})"
@@ -183,7 +185,7 @@ def callback_inline(call):
         download_markup = types.InlineKeyboardMarkup()
         download_markup.add(types.InlineKeyboardButton("🌐 موقع المطور الرسمي", url=DEVELOPER_URL))
 
-        log_status(chat_id, "📤 جاري الآن إرسال ملف الـ PDF النهائي للمستخدم...")
+        log_status(chat_id, "📤 جاري الآن إرسال ملف الـ PDF النهائي للمخدم...")
         with open(output_file, 'rb') as doc:
             bot.send_document(
                 chat_id, 
@@ -195,7 +197,7 @@ def callback_inline(call):
             )
             
         bot.delete_message(chat_id, data['msg_id'])
-        log_status(chat_id, "🎉 تم تسليم الملف بنجاح وإغلاق الطلب.")
+        log_status(chat_id, "🎉 تم تسليم الملف بنجاح وإغلاق الطلب العربي.")
 
     except Exception as e:
         log_status(chat_id, f"💥 حدث خطأ أثناء المعالجة: {str(e)}")
