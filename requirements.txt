@@ -1,4 +1,5 @@
-gunicorn
 pyTelegramBotAPI
-pywin32
 pypdf
+python-pptx
+pdf2image
+aspose-slides
